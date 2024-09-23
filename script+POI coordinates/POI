@@ -1,1 +1,2171 @@
+The proposed algorithm can be divided into three parts. The first is about the clustering of POIs, i.e., Algorithm 1 and Algorithm 2; the second part is about the sweep coverage algorithm in simultaneous sweep mode, i.e., Algorithm 3; and the third part is about the sweep coverage algorithm in batch sweep mode, i.e., Algorithm 4. Regarding the code run, first run either Algorithm 1 or Algorithm 2 to get the clustering of the POIs, and then run either Algorithm 3 or Algorithm 4. In addition, in Algorithm 3 and Algorithm 4, the imbo_route function is called to plan the UAV swarm’s sweep path.
+
+Algorithm 1 Clustering of POIs based on spatio-temporal information
+(Height fixed)
+Re_UAV=250
+Hmin=100;
+H=150;
+td=30;
+R_UAV=sqrt(Re_UAV^2-H^2);
+figure(1)
+x=POI(:,1);
+y=POI(:,2);
+z=POI(:,3);
+plot3(x,y,z,'bo');
+grid on
+hold on
+set(gca,'ylim',[0,4000],'ytick',[0:200:4000]);
+set(gca,'xlim',[0,4000],'xtick',[0:200:4000]);
+set(gca,'zlim',[0,50],'ztick',[0:10:50]);
+xlabel('x/m');
+ylabel('y/m');
+zlabel('z/m');
+for j=1:1:size(POI,1)
+text(x(j)+0.8,y(j)+0.8,z(j)+0.8, num2str(j))
+end
+T1=T;
+POI1=POI;
+j=1;
+sigle_POI=[];
+sigle_T=[];
+sigle_member=[];
+cluster_POI=[];
+cluster_T=[];
+cluster_ME=[];
+T_temp=[];
+cluster_r=[];
+CPOI_number=[];
+SPOI_number=[];
+cluster_H_fly=[];
+sigle_H_fly=[];
+while isempty(POI1)~=1
+i=1;
+flag=1;
+it=1;
+sign=zeros(size(POI1,1),1);
+t1=POI1(i,1:3);
+temp=POI1(i,1:3);
+T_temp=[];
+H_temp=[];
+sign(1,1)=1;
+while flag
+for j=1:size(POI1,1)
+if sign(j,1)~=1
+if sqrt((POI1(j,1)-t1(1,1))^2+(POI1(j,2)-t1(1,2))^2)<2*R_UAV &&abs(T1(j,1)-T1(1,1))<=td;
+temp=[temp;POI1(j,1:3)]; 
+sign(j,1)=1;
+end
+end
+end
+a=find(sign~=0);
+if it==size(temp,1) || size(POI1,1)==size(find(sign~=0),1)
+flag=0;
+else
+it=it+1;
+t1=temp(it,:);
+end
+end
+[~,ind]=ismember(temp,POI,'rows');
+T_temp=[T_temp;T(ind,1)];
+H_temp=[H_temp;POI(ind,3)];
+add_judge=[];
+add_T=[];
+add_H=[];
+k=1;
+H_new=H;
+if size(temp,1)==1
+n=1;
+h=temp(1,3);
+if H>=Hmin+h
+H_fly=H;
+else
+H_fly=H+h;
+end
+t=T_temp;
+SPOI_number=[SPOI_number;n];
+sigle_H_fly=[sigle_H_fly;H_fly];
+sigle_POI=[sigle_POI;temp(:,1:3)];
+sigle_T=[sigle_T;T_temp];
+[~,ind]=ismember(temp,POI,'rows');
+sigle_member=[sigle_member;ind];
+else
+temp_new=temp;
+T_temp_new=T_temp;
+H_temp_new=H_temp;
+while isempty(temp_new)~=1
+D_temp_new=[];
+no_add=[];
+no_add_T=[];
+temp=temp_new; 
+T_temp=T_temp_new;
+H_temp=H_temp_new;
+if size(temp_new,1)<2
+cen=temp(1,1:2);
+if H>=Hmin+temp(1,3)
+H_fly=H;
+else
+H_fly=H_new+temp(1,3);
+end
+r=R_UAV;
+[~,ind]=ismember(temp,POI,'rows');
+cluster_ME=[cluster_ME;ind];
+temp_new=[];
+else
+for i=2:size(temp_new,1)
+for j=1:i-1
+D_temp_new(i,j)=sqrt(sum((temp_new(i,:)-temp_new(j,:)).^2));
+end
+end
+D_temp_new(D_temp_new ==0)=NaN;
+[p1,p2]=find(D_temp_new==(min(min(D_temp_new))));
+p_sum=[p1;p2];
+temp_new(p_sum(:,1),:)=[];
+r=sqrt(sum((temp(p1,1:2)-temp(p2,1:2)).^2))/2;
+cen=(temp(p1,1:2)+temp(p2,1:2))/2;
+h=max(temp(:,3));
+for i=1:size(temp_new,1)
+newp=temp_new(i,1:2); 
+dc=sqrt(sum((cen(1,:)-newp(1,:)).^2));
+if dc>r
+r_new=(r+dc)/2;
+if r_new<=R_UAV
+cen=cen+(dc-r_new)/dc*(newp-cen);
+r=r_new;
+else
+no_add=[no_add;temp_new(i,:)];
+end
+end
+end
+if isempty(no_add)==1
+temp_new(:,1:3)=[];
+else
+[~,e]=ismember(temp,no_add);
+d=find(e(:,1)~=0);
+temp_new=no_add;
+T_temp_new=T_temp(d,1);
+H_temp_new=H_temp(d,1);
+temp(d,:)=[];
+T_temp(d,:)=[];
+[~,e2]=ismember(POI1,temp);
+d1=find(e2(:,1)~=0&e2(:,2)~=0);
+POI1(d1,:)=[];
+T1(d1,:)=[];
+end
+[~,ind]=ismember(temp,POI,'rows');
+cluster_ME=[cluster_ME;ind];
+h=max(temp(:,3));
+if H>=Hmin+h
+H_fly=H;
+else
+H_fly=H_new+h;
+end
+end
+CPOI_number=[CPOI_number;size(temp,1)];
+cluster_H_fly=[cluster_H_fly;H_fly];
+cluster_r=[cluster_r;r];
+cluster_T=[cluster_T;min(T_temp)];
+cen=[cen h];
+cluster_POI=[cluster_POI;cen]; 
+end
+end
+[~,e2]=ismember(POI1,temp);
+d1=find(e2(:,1)~=0&e2(:,2)~=0);
+POI1(d1,:)=[];
+T1(d1,:)=[];
+end
+cluster_member=cell(size(cluster_POI,1),1);
+cluster_ME1=cluster_ME;
+for i=1:size(cluster_member,1)
+num=CPOI_number(i,1);
+num_temp=cluster_ME1(1:num,1);
+cluster_ME1(1:num)=[];
+num_temp=num_temp';
+cluster_member{i,:}=num_temp;
+end 
+cluster_POI(:,3)=cluster_H_fly;
+sigle_POI(:,3)=sigle_H_fly;
+sigle_r=R_UAV*ones(size(sigle_POI,1),1);
+for i=1:size(cluster_r,1)
+if cluster_r(i,1)>R_UAV
+cluster_r(i,1)=ceil(cluster_r(i,1));
+else
+cluster_r(i,1)=R_UAV;
+end
+end
+all_POI=cell(2,1);
+all_T=cell(2,1);
+all_r=cell(2,1)
+for i=1:size(all_POI,1)
+if i==1
+all_POI{i,:}=cluster_POI;
+all_T{i,1}=cluster_T;
+all_r{i,1}=cluster_r;
+else
+all_POI{i,1}=sigle_POI;
+all_T{i,1}=sigle_T;
+all_r{i,1}=sigle_r;
+end
+end
+start=[1200 1200 H];
+start_r=[R_UAV];
+
+figure(2)
+x=POI(:,1);
+y=POI(:,2);
+z=POI(:,3);
+plot3(x,y,z,'bo');
+grid on
+hold on
+xlabel('x/m');
+ylabel('y/m');
+zlabel('z/m');
+for i=1:1:size(POI,1)
+text(x(i)+0.8,y(i)+0.8,z(i)+0.8, num2str(i))
+end
+
+for i=1:size(all_POI,1)
+seg_POI=cell2mat(all_POI(i));
+seg_r=cell2mat(all_r(i));
+seg_POI=[seg_POI;start];
+seg_r=[seg_r;start_r];
+x1=seg_POI(:,1);
+y1=seg_POI(:,2);
+plot(x1,y1,'r*');
+hold on
+for j=1:size(seg_POI,1)
+text(x1(j)+0.8,y1(j)+0.8, num2str(j));
+rectangle('Position',[seg_POI(j)-seg_r(j,1),seg_POI(j+size(seg_POI,1))-seg_r(j,1),2*seg_r(j,1),2*seg_r(j,1)],'Curvature',[1,1],'edgecolor','r'),axis equal;
+end
+grid on
+hold on 
+end
+hold on
+set(gca,'ylim',[0,4000],'ytick',[0:200:4000]);
+set(gca,'xlim',[0,4000],'xtick',[0:200:4000]);
+set(gca,'zlim',[0,50],'ztick',[0:10:50]);
+
+
+Algorithm 2 Clustering of POIs based on spatio-temporal information
+(Height varied)
+Re_UAV=250
+Hmin=100;
+H=150;
+td=30;
+R_UAV=sqrt(Re_UAV^2-H^2); 
+figure(1)
+x=POI(:,1);
+y=POI(:,2);
+z=POI(:,3);
+plot3(x,y,z,'bo');
+grid on
+hold on
+set(gca,'ylim',[0,4000],'ytick',[0:200:4000]);set(gca,'xlim',[0,4000],'xtick',[0:200:4000]);
+set(gca,'zlim',[0,50],'ztick',[0:10:50]);
+xlabel('x/m');
+ylabel('y/m');
+zlabel('z/m');
+for i=1:1:size(POI,1)
+text(x(i)+0.8,y(i)+0.8,z(i)+0.8, num2str(i))
+end
+T1=T;
+POI1=POI;
+k=1;
+sigle_POI=[];
+sigle_T=[];
+sigle_member=[];
+cluster_POI=[];
+cluster_T=[];
+cluster_ME=[];
+T_temp=[];
+cluster_r=[];
+CPOI_number=[];
+SPOI_number=[];
+cluster_H_fly=[];
+sigle_H_fly=[];
+no_add=[];
+no_add_T=[]
+while isempty(POI1)~=1
+for i=1
+D_POI1=[];
+sign=zeros(size(POI1,1),1);
+sign(i,1)=1;
+for j=2:size(POI1,1)
+D_POI1(i,j)=sqrt(sum((POI1(i,:)-POI1(j,:)).^2));
+T_dif=abs(T1(i,1)-T1(j,1));
+if D_POI1(i,j)<2*R_UAV&&T_dif<td 
+if sign(j,1)~=0&&sign(j,1)<sign(i,1)
+sign(i,1)=sign(j,1);
+else
+sign(j,1)=sign(i,1);
+end
+end
+end
+temp=[];
+T_temp=[];
+H_temp=[];
+add_judge=[];
+add_T=[];
+add_H=[];
+k=1;
+R_UAV_change=R_UAV;
+H_new=H;
+for g=1:size(sign,1)
+if sign(g,1)==1
+T_temp=[T_temp;T1(g,1)];
+temp=[temp;POI1(g,1:3)];
+H_temp=[H_temp;POI1(g,3)];
+end
+end
+if size(temp,1)==1
+n=1;
+h=temp(1,3);
+if H>=Hmin+h
+H_fly=H;
+else
+H_fly=H+h;
+end
+t=T_temp;
+SPOI_number=[SPOI_number;n];
+sigle_H_fly=[sigle_H_fly;H_fly];
+sigle_POI=[sigle_POI;temp(:,1:3)];
+sigle_T=[sigle_T;T_temp];
+[~,ind]=ismember(temp,POI,'rows');
+sigle_member=[sigle_member;ind];
+else
+D_temp=[];
+for i=2:size(temp,1)
+for j=1:i-1
+D_temp(i,j)=sqrt(sum((temp(i,:)-temp(j,:)).^2));
+end
+end 
+temp_new=temp;
+T_temp_new=T_temp;
+H_temp_new=H_temp;
+D_temp(D_temp ==0)=NaN;
+m=min(D_temp);
+mm=min(m)
+[p1,p2]=find(D_temp==mm);
+temp_new(p1,1:3)=0;
+temp_new(p2,1:3)=0;
+id=temp_new(:,2)==0;
+temp_new(id,:)=[];
+T_temp_new(id,:)=[];
+H_temp_new(id,:)=[];
+r=sqrt(sum((temp(p1,1:2)-temp(p2,1:2)).^2))/2;
+cen=(temp(p1,1:2)+temp(p2,1:2))/2;
+A=vertcat(temp(p1,1:3),temp(p2,1:3));
+[~,ind]=ismember(A,POI,'rows');
+cluster_ME=[cluster_ME;ind];
+h=max(temp(:,3));%
+for i=1:size(temp_new,1)
+newp=temp_new(i,1:2); 
+dc=sqrt(sum((cen(1,:)-newp(1,:)).^2));
+if dc>r
+r=(r+dc)/2;
+cen=cen+(dc-r)/dc*(newp-cen);
+end 
+if r>R_UAV_change
+add_judge(k,1:3)=temp_new(i,1:3);
+add_T(k,1)=T_temp_new(i,1);
+add_H(k,1)=H_temp_new(i,1)+H;
+k=k+1;
+R_change=ceil(r);
+H_change=sqrt(Re_UAV^2-R_change^2)
+if H_change>(Hmin+h)||H_change==(Hmin+h)
+if H_change-(Hmin+h)>=10
+H_change=H_change-10;
+else
+H_change=(Hmin+h);
+end
+H_new=ceil(H_change); 
+add_judge=[];
+R_UAV_change=R_change;
+else
+no_add=[no_add;add_judge];
+no_add_T=[no_add_T;add_T];
+no_add_H=no_add(:,3)+H;
+end
+end
+end
+if isempty(add_judge)==0
+temp_new=setdiff(temp_new,add_judge, 'rows');
+end
+[~,ind]=ismember(temp_new,POI,'rows');
+cluster_ME=[cluster_ME;ind];
+r=sqrt(sum((temp(p1,1:2)-temp(p2,1:2)).^2))/2; 
+cen=(temp(p1,1:2)+temp(p2,1:2))/2; 
+for i=1:size(temp_new,1)
+newp=temp_new(i,1:2); 
+dc=sqrt(sum((cen(1,:)-newp(1,:)).^2));
+if dc>r
+r=(r+dc)/2;
+cen=cen+(dc-r)/dc*(newp-cen);
+end
+end
+[~,e]=ismember(temp,add_judge);
+d=[];
+if isempty(e)
+else
+d=find(e(:,1)~=0);
+temp(d,:)=[];
+T_temp(d,:)=[];
+end 
+n=size(temp,1);
+h=max(temp(:,3));
+if H_new>=Hmin+h
+H_fly=H_new;
+else
+H_fly=H_new+h;
+end
+t=min(T_temp);
+CPOI_number=[CPOI_number;n];
+cluster_H_fly=[cluster_H_fly;H_fly];
+cluster_r=[cluster_r;r];
+cluster_T=[cluster_T;t];
+cen=[cen h];
+cluster_POI=[cluster_POI;cen];
+end
+[~,e1]=ismember(POI1,temp);
+if isempty(e1)
+else
+d1=find(e1(:,1)~=0&e1(:,2)~=0);
+POI1(d1,:)=[];
+T1(d1,:)=[];
+end
+end
+end 
+cluster_member=cell(size(cluster_POI,1),1);
+cluster_ME1=cluster_ME;
+for i=1:size(cluster_member,1)
+num=CPOI_number(i,1);
+num_temp=cluster_ME1(1:num,1);
+cluster_ME1(1:num)=[];
+num_temp=num_temp';
+cluster_member{i,:}=num_temp;
+end 
+if isempty(sigle_POI)
+else
+flag=zeros(1,size(sigle_POI,1));
+del_sigle_POI=[];
+for i=1:size(cluster_POI,1)
+for j=1:size(sigle_POI,1)
+if flag(1,j)==0
+D_sc=sqrt(sum((cluster_POI(i,:)-sigle_POI(j,:)).^2));
+r=(r+D_sc)/2;
+cen=cluster_POI(i,1:2)+(dc-r)/dc*(sigle_POI(j,1:2)-cluster_POI(i,1:2));
+temp_cluster=[cluster_POI(i,:);sigle_POI(j,:)];
+h=max(temp_cluster(:,3));
+Hsafe=Hmin+h;
+H_change=sqrt(Re_UAV^2-r^2);
+if H_change>Hsafe
+del_sigle_POI=[del_sigle_POI;sigle_POI(j,:)];
+H_fly=H_change+h;
+cluster_POI(i,1:2)=cen;
+cluster_H_fly(i,1)=H_fly;
+cluster_POI(i,3)=H_fly;
+t=min(cluster_T(i,1),sigle_T(j,1));
+cluster_T(i,1)=t;
+[~,ind]=ismember(sigle_POI(j,:),POI,'rows');
+add_member=[cell2mat(cluster_member(i,:)) ind];
+cluster_member{i,:}=add_member;
+CPOI_number(i,1)=size(cluster_POI,1)
+end
+end 
+end
+end
+[~,e]=ismember(sigle_POI,del_sigle_POI);
+if isempty(e)
+sigle_POI(e(:,1),:)=[];
+sigle_T(e(:,1),:)=[];
+SPOI_number(e(:,1),:)=[];
+sigle_H_fly(e(:,1),:)=[];
+end
+end
+cluster_POI(:,3)=cluster_H_fly;
+sigle_POI(:,3)=sigle_H_fly;
+sigle_r=R_UAV*ones(size(sigle_POI,1),1);
+for i=1:size(cluster_r,1)
+if cluster_r(i,1)>R_UAV
+cluster_r(i,1)=ceil(cluster_r(i,1));
+else
+cluster_r(i,1)=R_UAV;
+end
+end
+all_POI=cell(2,1);
+all_T=cell(2,1);
+all_r=cell(2,1)
+for i=1:size(all_POI,1)
+if i==1
+all_POI{i,:}=cluster_POI;
+all_T{i,1}=cluster_T;
+all_r{i,1}=cluster_r;
+else
+all_POI{i,1}=sigle_POI;
+all_T{i,1}=sigle_T;
+all_r{i,1}=sigle_r;
+end
+end
+start=[1200 1200 H];
+start_r=[240];
+
+figure(2)
+x=POI(:,1);
+y=POI(:,2);
+z=POI(:,3);
+plot3(x,y,z,'bo');
+grid on
+hold on
+xlabel('x/m');
+ylabel('y/m');
+zlabel('z/m');
+for i=1:1:size(POI,1)
+text(x(i)+0.8,y(i)+0.8,z(i)+0.8, num2str(i))
+end
+
+for i=1:size(all_POI,1)
+seg_POI=cell2mat(all_POI(i));
+seg_r=cell2mat(all_r(i));
+seg_POI=[seg_POI;start];
+seg_r=[seg_r;start_r];
+x1=seg_POI(:,1);
+y1=seg_POI(:,2);
+plot(x1,y1,'r*');
+hold on
+for j=1:size(seg_POI,1)
+text(x1(j)+0.8,y1(j)+0.8, num2str(j));
+rectangle('Position',[seg_POI(j)-seg_r(j,1),seg_POI(j+size(seg_POI,1))-seg_r(j,1),2*seg_r(j,1),2*seg_r(j,1)],'Curvature',[1,1],'edgecolor','r'),axis equal;
+end
+grid on
+hold on 
+end
+hold on
+set(gca,'ylim',[0,4000],'ytick',[0:200:4000]);
+set(gca,'xlim',[0,4000],'xtick',[0:200:4000]);
+set(gca,'zlim',[0,50],'ztick',[0:10:50]);
+
+
+Algorithm 3 Sweep coverage algorithm in simultaneous sweep mode
+
+Tcon=10;
+Vxymax=30;
+Vzmax=5;
+t_up=(H-Hmin)/Vzmax;
+UAV_up=100;
+UAV_down=80;
+UAV_energy_max=270000;
+UAV_Vxymax_energy=200;
+UAV_com=10; 
+all_judge=cell(2,1);
+T_start=[0];
+T_sweep=zeros(1,size(POI,1));
+T_sweep_start=zeros(1,1);
+sita_UAV=60;
+num_UAV=3;
+UAVs_position=zeros(num_UAV,2);
+UAV_num_consum=zeros(num_UAV,1);
+UAV_serial=(linspace(1,num_UAV,num_UAV))';
+d2=[];
+d3=[];
+V_final=[];
+T_sxy=[];
+T_sz=[];
+T_com=[];
+t_com=[];
+H_fly_actual=[start(1,3)];
+sigle_member1=sigle_member;
+AOI=0;
+AOI_point=[];
+m1=0;
+for k=1:size(all_POI,1)
+seg_POI=cell2mat(all_POI(k));
+seg_T=cell2mat(all_T(k));
+seg_POI1=[];
+seg_T1=[];
+need_to_sweep=[];
+seg_POI1=seg_POI;
+seg_POI2=seg_POI1;
+seg_T1=seg_T;
+seg_T1=[seg_T1;T_start];
+seg_POI1=[seg_POI1;start];
+seg_T2=seg_T1;
+cluster_member1=cluster_member
+cluster_member2=cluster_member1;
+final=start;
+start1=start;
+figure(3)
+sink=seg_POI1(:,1:2);
+Best_Route =imbo_route(sink,seg_T1,seg_T1)
+judge_cluster_member=zeros(size(cluster_member1,1),1);
+judge_sigle_member=zeros(size(sigle_member1,1),1);
+n1=size(seg_POI1,1);
+n=0;
+sweep_success=zeros(size(POI,1),1);
+need_to_sweep1=[];
+need_to_sweepT=[];
+while n<n1
+sweep_point=[];
+if isempty(need_to_sweep1)==1
+if (n+1)==n1
+n=n+1;
+sweep_point=[start1;final];
+else
+n=n+1;
+sweep_point=[start1;seg_POI1(Best_Route(1,n+1),1:3)];
+if k<2
+judge_cluster_member(Best_Route(1,n+1),1)=1;
+else
+judge_sigle_member(Best_Route(1,n+1),1)=1;
+end
+end
+
+else
+dis_need_to_sweep=pdist2(need_to_sweep1(:,1:3),start1,'euclidean');
+[~,indexx]=min(dis_need_to_sweep);
+sweep_point=[start1;need_to_sweep1(indexx,:)];
+need_to_sweep1=setdiff(need_to_sweep1,need_to_sweep1(indexx,:),'rows','stable');
+end
+start1=sweep_point(2,:);
+P=sweep_point(1,1:2)-sweep_point(2,1:2);
+H_fly_actual=[ H_fly_actual;sweep_point(2,3)];
+u=abs(P(1,2))./abs(P(1,1));
+u1=(P(1,2))./(P(1,1));
+sita_sweep_point=(atan(u)/pi)*180;
+b=sweep_point(1,2)-sweep_point(1,1)*u1;
+v_y=1;
+line_final(1,1)=u1;
+line_final(2,1)=b;
+D_sweep_point=sqrt(sum((sweep_point(1,1:2)-sweep_point(2,1:2)).^2));
+R_UAV=sqrt(Re_UAV^2-(sweep_point(2,3))^2);
+if k<2
+[~,e3]=ismember(need_to_sweep,sweep_point(2,:));
+if isempty(e3)
+else
+d3=find(e3(:,1)~=0&e3(:,2)~=0);
+end
+if isempty(d3)==1
+if size(find(d2),1)==(size(cluster_ME,1))
+V_s=Vxymax;
+else
+Ang=zeros(2,size(POI,1));
+for g=1:2
+for h=1:size(POI,1)
+P=sweep_point(g,:)-POI(h,:);
+u=abs(P(1,2))./abs(P(1,1));
+Ang(g,h)=(atan(u)/pi)*180;
+end
+end
+a=find(Ang<=60);
+b=round(size(a,1)/2);
+V_s=b*Vxymax/(size(POI,1));
+end
+else
+V_s=Vxymax;
+end
+V_final=[V_final;V_s];
+else
+V_s=Vxymax;
+V_final=[V_final;V_s];
+end
+t_sxy=D_sweep_point/V_s;
+t_sz=abs((sweep_point(1,3)-sweep_point(2,3))/Vzmax); 
+t_s=t_sxy;
+T_sxy=[T_sxy;t_sxy];
+T_sz=[T_sz;t_sz];
+alpha=sita_sweep_point;
+beta=90-alpha;
+UAVs_position=zeros(num_UAV,2);
+UAVs_position(1,:)=sweep_point(1,1:2);
+if (sita_UAV/2)>alpha
+if (sita_UAV/2)>beta
+x1=(cosd(sita_UAV/2-alpha)*2*R_UAV);
+y1=(sind(sita_UAV/2-alpha)*2*R_UAV);
+x2=(sind(sita_UAV/2-beta)*2*R_UAV);
+y2=(cosd(sita_UAV/2-beta)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y2;
+end
+end
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i=1:((num_UAV-1)/2)
+UAVs_position(i+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i*y1;
+end
+else
+for i=1:floor((num_UAV-1)/2)
+UAVs_position(i+1+(num_UAV/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+(num_UAV/2),2)=UAVs_position(1,2)-i*y1;
+end
+end 
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+else
+x1=(cosd(sita_UAV/2-alpha)*2*R_UAV);
+y1=(sind(sita_UAV/2-alpha)*2*R_UAV);
+x2=(sind(beta-sita_UAV/2)*2*R_UAV);
+y2=(cosd(beta-sita_UAV/2)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;%左侧
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(num_UAV,2)~=0%
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y2;
+end
+end 
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV-1/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(num_UAV-1/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y2;
+end 
+end
+end
+end
+end
+else
+if (sita_UAV/2)>beta
+x1=(cosd(alpha-sita_UAV/2)*2*R_UAV);
+y1=(sind(alpha-sita_UAV/2)*2*R_UAV);
+x2=(sind(sita_UAV/2-beta)*2*R_UAV);
+y2=(cosd(sita_UAV/2-beta)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y2;
+end 
+end
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y1;
+end 
+end
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;%
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+else
+x1=(cosd(alpha-sita_UAV/2)*2*R_UAV);
+y1=(sind(alpha-sita_UAV/2)*2*R_UAV);
+x2=(sind(beta-sita_UAV/2)*2*R_UAV);
+y2=(cosd(beta-sita_UAV/2)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y2;
+end 
+end
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y1;
+end 
+end 
+else
+for j1=1:(num_UAV/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(num_UAV,2)~=0
+for i1=1:((num_UAV-1)/2)
+UAVs_position(i1+1+((num_UAV-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((num_UAV-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((num_UAV-1)/2)
+UAVs_position(i1+1+(num_UAV/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(num_UAV/2),2)=UAVs_position(1,2)+i1*y2;
+end 
+end 
+end
+end
+end
+end
+update_positions=zeros(num_UAV,2);
+x0=(cosd(sita_sweep_point).*V_s);
+y0=(sind(sita_sweep_point).*V_s);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+x0=x0;
+y0=y0;
+else
+x0=-x0;
+y0=y0;
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+x0=x0;
+y0=-y0;
+else
+x0=-x0;
+y0=-y0;
+end
+end
+for i2=0:t_s
+update_positions(:,1)=UAVs_position(:,1)+i2*x0;
+update_positions(:,2)=UAVs_position(:,2)+i2*y0;
+coverage_table=zeros(size(UAVs_position,1),size(POI,1));
+for j2=1:size(update_positions,1)
+for g=1:size(POI,1)
+d_uavp=sqrt(sum((update_positions(j2,:)-POI(g,1:2)).^2));
+if d_uavp<=R_UAV
+coverage_table(j2,g)=1;
+else
+coverage_table(j2,g)=0;
+end 
+end
+end
+sum_table=zeros(1,size(POI,1));
+for m=1:size(POI,1)
+sum_table(1,m)=sum(coverage_table(:,m));
+end
+T_sweep=[T_sweep;sum_table];
+
+for j2=1:size(update_positions,1)
+d_uavp=sqrt(sum((update_positions(j2,:)-start(1,1:2)).^2));
+if d_uavp<=R_UAV
+coverage_table_start(j2,1)=1;
+else
+coverage_table_start(j2,1)=0;
+end 
+end
+sum_table_start=zeros(1,1);
+sum_table_start(1,1)=sum(coverage_table_start(:,1));
+T_sweep_start=[T_sweep_start;sum_table_start];
+end
+for i3=1:size(T_sweep,2)
+input=1;
+temp=T_sweep(:,i3)';
+t=temp==input;
+out=find(diff([t false])==-1)-find(diff([false t])==1)+1;
+if (length(out(out>=Tcon)))>=1
+sweep_success(i3,1)=1;
+end
+end
+if k<2
+if isempty(d3)==1
+[~,e4]=ismember(seg_POI2,sweep_point(2,:));
+d4=find(e4(:,1)~=0&e4(:,2)~=0); 
+if isempty(d4)~=1
+judge_sweep=cluster_member1{d4};
+end
+for i4=1:size(judge_sweep,2) 
+input=1;
+temp=T_sweep(:,judge_sweep(1,i4))';
+t=temp==input;
+out=find(diff([t false])==-1)-find(diff([false t])==1)+1;
+if out<(Tcon/2+1)
+need_to_sweeptemp=POI(judge_sweep(1,i4),1:3);
+old_sweep_point=sweep_point(2,:);
+if H>=Hmin+POI(judge_sweep(1,i4),3)
+H_fly=H;
+else
+H_fly=H_new+POI(judge_sweep(1,i4),3);
+end
+need_to_sweeptemp(:,3)=H_fly;
+need_to_sweep1=[need_to_sweep1;need_to_sweeptemp];
+need_to_sweepT=[need_to_sweepT;T(judge_sweep(1,i4),1)];
+end
+end
+else
+[~,e4]=ismember(seg_POI2,old_sweep_point);
+d4=find(e4(:,1)~=0&e4(:,2)~=0);
+if isempty(d4)~=1
+judge_sweep=cluster_member1{d4};
+end
+success=find(sweep_success);
+[~,ind]=ismember(judge_sweep,success);
+ind=ind';
+ind1=find(ind==0);
+for h1=1:size(ind1,1)
+if POI(judge_sweep(1,(ind1(h1,1))),1:2)==sweep_point(2,1:2)
+else
+a1=T_sweep(:,judge_sweep(1,(ind1(h1,1))));
+b1=find(a1);
+res=[];
+table=[];
+n2=1;
+k1=1;
+while k1<size(b1,1)
+j5 = k1+1 ;
+while j5 <= size(b1,1) & b1(j5)==b1(j5-1)+1
+n2 = n2 + 1 ;
+j5 = j5 + 1 ;
+end
+if n2 >= (Tcon/2+1)&n2<Tcon
+res = [res ; b1(k1),n2] ;
+table=[table;res];
+end
+n2 = 1 ;
+k1 = j5 ;
+end
+if isempty(table)==0
+s_sum=(table(size(table,1),1)+table(size(table,1),2)-1);
+if s_sum==size(T_sweep,1)
+else
+need_to_sweeptemp=POI(judge_sweep(1,(ind1(h1,1))),1:3); 
+if H>=Hmin+POI(judge_sweep(1,(ind1(h1,1))),3)
+H_fly=H;
+else
+H_fly=H_new+POI(judge_sweep(1,(ind1(h1,1))),3);
+end
+need_to_sweeptemp(:,3)=H_fly;
+need_to_sweep1=[need_to_sweep1;need_to_sweeptemp];
+need_to_sweepT=[need_to_sweepT;T(judge_sweep(1,(ind1(h1,1))),1)];
+end
+end
+end
+end
+end
+need_to_sweep=[need_to_sweep;need_to_sweep1];
+judge_cluster_sweep=find(sweep_success);
+[d2,~]=ismember(cluster_ME,judge_cluster_sweep);
+end 
+ind1=find(sweep_success);
+if isempty(ind1)==0
+if k<2
+for i4=1:size(cluster_member2) 
+if judge_cluster_member(i4,1)~=1
+member=cluster_member2{i4,:};
+[~,e6]=ismember(member,ind1);
+d6= all(e6(:));
+judge_POI=seg_POI(i4,:);
+[~,e5]=ismember(seg_POI1,judge_POI);
+d5=find(e5(:,1)~=0&e5(:,2)~=0&e5(:,3)~=0);
+if d5~=0&d6==1
+[~,d55]=find( Best_Route==d5);
+judge_cluster_member([d5],:)=1;
+Best_Route(:,[d55])=[];
+n1=n1-1;
+end
+end
+end
+else
+for i4=1:size(sigle_member)
+if judge_sigle_member(i4,1)~=1
+member=sigle_member(i4,:);
+[~,e6]=ismember(member,ind1);
+d6= all(e6(:));
+judge_POI=seg_POI(i4,:);
+[~,e5]=ismember(seg_POI1,judge_POI);
+d5=find(e5(:,1)~=0&e5(:,2)~=0&e5(:,3)~=0);
+if d5~=0&d6==1
+[~,d55]=find( Best_Route==d5);
+judge_sigle_member([d5],:)=1;
+Best_Route(:,[d55])=[];
+n1=n1-1;
+end
+end
+end
+end 
+end
+ 
+end
+t_com=size(T_sweep,1)+sum(T_sz(:,1))+t_up+t_up;
+T_com=[T_com;t_com]; 
+if k<2
+nohot=size(V_final,1);
+end
+sweep_index=find(sweep_success);
+[c2,~]=ismember(sigle_member,sweep_index);
+sigle_POI(c2(:,1),:)=[];
+sigle_member(c2(:,1),:)=[];
+sigle_T(c2(:,1),:)=[];
+all_POI{2,1}=sigle_POI;
+all_T{2,1}=sigle_T;
+ 
+success_point=find(sweep_success);
+[calculate,~]=ismember(success_point,AOI_point);
+index_c=find(calculate==0);
+success_point1=success_point(index_c,1);
+for i5=1:size(success_point1,1)
+AOI_point=[AOI_point;success_point1(i5,1)];
+a1=T_sweep(:,success_point1(i5,1));
+b=find(a1);
+res=[];
+table=[];
+n2=1;
+k1=1;
+while k1<size(b,1)
+j5 = k1+1 ;
+while j5 <= size(b,1) & b(j5)==b(j5-1)+1
+n2 = n2 + 1 ;
+j5 = j5 + 1 ;
+end
+if n2 >= Tcon
+res = [res ; b(k1),n2] ;
+table=[table;res];
+end
+n2 = 1 ;
+k1 = j5 ;
+end
+table=unique(table,'rows','stable');
+m1=m1+1;
+Time_diff=t_com-table(size(table,1),1);
+AOI=AOI+Time_diff;
+Table{m1,1}=table;
+end 
+end
+AOI_average=AOI/size(POI,1);
+gobal_period=size(T_sweep,1);
+
+
+
+Algorithm 4 Sweep coverage algorithm in batch sweep mode
+
+Tcon=10;
+Vxymax=30;
+Vzmax=5;
+UAV_up=100;
+UAV_down=80;
+UAV_energy_max=2700000;
+UAV_Vxymax_energy=200;
+UAV_com=10;
+all_judge=cell(2,1);
+T_sweep=zeros(1,size(POI,1));
+sweep_success=zeros(size(POI,1),1);
+sita_UAV=140;
+num_UAV=5;
+T_start_perid=[0];
+t_up=(H-Hmin)/Vzmax;
+UAV_num_consum=zeros(num_UAV,1);
+UAVs_position=zeros(num_UAV,2);
+d2=[];
+d3=[];
+Bat=[];
+Time_start=[];
+Batch_final=[];
+V_final=[];
+T_sxy=[];
+T_sz=[];
+T_com=[];
+t_com=[];
+UAV_number=[];
+sweep_missed=[];
+change_batch=[];
+H_fly_actual=[start(1,3)];
+AOI=0;
+AOI_point=[];
+flag_miss=0;
+kn=size(all_POI,1);
+kkn=0;
+k=0;
+Table=cell(size(POI,1),1);
+while k<size(all_POI,1);
+serial=[]; 
+k=k+1;
+if flag_miss==0
+if k==2
+hot_to_nonhot=size(V_final,1);
+sweep_index=find(sweep_success);
+[c2,~]=ismember(sigle_member,sweep_index);
+sigle_POI(c2(:,1),:)=[];
+sigle_member(c2(:,1),:)=[];
+sigle_T(c2(:,1),:)=[];
+all_POI{2,1}=sigle_POI;
+all_T{2,1}=sigle_T;
+end
+seg_POI=cell2mat(all_POI(k));
+seg_T=cell2mat(all_T(k));
+seg_POI1=[];
+seg_T1=[];
+seg_dir=[];
+need_to_sweep=[];
+flag=0;
+flag1=0;
+sita=zeros(size(seg_POI,1),1);
+dis=zeros(size(seg_POI,1),1);
+dir=zeros(size(seg_POI,1),1);
+P=zeros(1,2);
+for i=1:size(seg_POI,1)
+P=start(1,1:2)-seg_POI(i,1:2);
+if P(1,:)==0
+sita(i,1)=0; 
+else
+u=abs(P(1,2))./abs(P(1,1));
+sita(i,1)=(atan(u)/pi)*180; 
+end
+end
+for i=1:size(seg_POI,1)
+for j=1:size(seg_POI,1) 
+dis(i,1)=sqrt(sum((start(1,1:2)-seg_POI(i,1:2)).^2));
+end
+end
+for i=1:size(seg_POI,1)
+if seg_POI(i,2)>start(1,2)
+if seg_POI(i,1)>start(1,1)
+dir(i)=1;
+else
+dir(i)=2;
+end
+else
+if seg_POI(i,1)>start(1,1)
+dir(i)=4;
+else
+dir(i)=3;
+end
+end
+end
+judge=horzcat(sita,dis,dir);
+index_of_2=[];
+count = hist(judge(:,3),unique(judge(:,3)));
+count_a=tabulate(judge(:,3));
+count_a1=count_a;
+s=find(count_a1(:,2)==0);
+count_a1(s,:)=[]; 
+Bat1=1;
+if size(seg_POI,1)<2
+if k<2
+Batch_final=zeros(num_UAV,1);
+Batch_final(:,1)=Bat1;
+Batch_final1=Batch_final;
+end
+Bat(judge(1,3),1)=1;
+seg_dir=vertcat(seg_dir,judge(:,3));
+seg_dir1=seg_dir;
+index_of_2=1; 
+else
+for i=1:4
+a=find(judge(:,3)==i);
+if isempty(a)
+else
+if k<2
+if num_UAV<=2
+Bat(1,1)=num_UAV/size(count,2);
+Bat(1,2)=num_UAV/size(count,2);
+else
+Bat(i,1)=round((size(a,1)/size(judge,1))*(num_UAV-1));
+end
+else
+[max_count,index]=max(count_a1(:,2));
+[max_num,index1]=max(Batch_final);
+Batch_final1(index1,:)=[];
+if i==count_a1(index,1)
+Bat(i,1)=Batch_final(index1,1);
+else
+Bat(i,1)=Batch_final1(1,1);
+end
+end
+end
+index_of_2=vertcat(index_of_2,a);
+x=linspace(i,i,size(a,1));
+seg_dir=vertcat(seg_dir,(x'));
+seg_dir1=seg_dir;
+end
+if k<2
+Batch_final=Bat;
+Batch_final(find(Batch_final==0))=[];
+Batch_final=[Batch_final;Bat1];
+Batch_final1=Batch_final; 
+Batch_final_member=cell(size(Batch_final,1),1);
+UAV_num_consum1=UAV_num_consum;
+for j1=1:size(Batch_final_member,1)
+num_temp=UAV_num_consum1(1:Batch_final(j1,1),1);
+Batch_final_member{j1,:}=num_temp;
+end 
+end
+end
+if k<2
+cluster_member1=cell(size(index_of_2,1),1);
+cluster_member1=cluster_member(index_of_2);
+cluster_member2= cluster_member1;
+else
+sigle_member1=zeros(size(index_of_2,1),1);
+sigle_member1=sigle_member(index_of_2);
+sigle_member2=sigle_member1;
+end
+seg_POI1=[seg_POI1;seg_POI(index_of_2,:)];
+seg_T1=vertcat(seg_T1,seg_T(index_of_2,:));
+count1=hist(seg_dir(:,1),unique(seg_dir(:,1)));
+seg_POI2=seg_POI1;
+final=start;
+start1=start;
+add=0;
+add_old=0;
+seg_POI1=[seg_POI1;start];
+Best_Route_new=[];
+for gg=1:4
+[m_dir,~] = find(seg_dir==gg);
+if isempty(m_dir)==0
+add=add+size(m_dir,1);
+seg_dir_POI=seg_POI1(m_dir,:);
+seg_dir_T=seg_T1(m_dir,:);
+seg_dir_POI=[seg_dir_POI;start];
+seg_dir_T=[seg_dir_T;T_start_perid];
+if size(seg_dir_POI,1)>3
+sink=seg_dir_POI;
+Best_Route =imbo_route(sink,seg_dir_T,seg_T1);
+mim=0;
+[~,mi]=find(Best_Route==size(seg_dir_POI,1));
+if mi==size(Best_Route,2)
+Best_Route=flip(Best_Route);
+elseif mi==1
+Best_Route=Best_Route;
+else
+a1=Best_Route(1,mi:size(Best_Route,2));
+[~,b1]=ismember(Best_Route,a1);
+b2=find(b1==0);
+a2=Best_Route(1,b2);
+Best_Route=[a1 a2];
+end
+Best_Route(1,:)=Best_Route(1,:)+add_old;
+Best_Route(1,1)=size(seg_POI1,1);
+else
+serial(1,1:size(seg_dir_POI,1))=linspace(1,size(seg_dir_POI,1),size(seg_dir_POI,1));
+Best_Route=flip(serial);
+Best_Route(1,:)=Best_Route(1,:)+add_old;
+Best_Route(1,1)=size(seg_POI1,1);
+end
+Best_Route_new=[Best_Route_new Best_Route];
+add_old=add;
+end
+end
+else
+k=k-1;
+seg_POI1=[seg_POI1;start];
+seg_T1=[seg_T1;T_start_perid];
+if size(seg_POI1,1)>3
+sink=seg_POI1;
+seg_dir_T= seg_T1;
+Best_Route =imbo_route(sink,seg_dir_T,seg_T1); 
+mim=0;
+[~,mi]=find(Best_Route==size(seg_POI1,1));
+if mi==size(Best_Route,2)
+Best_Route=flip(Best_Route);
+elseif mi==1
+Best_Route=Best_Route;
+else
+a1=Best_Route(1,mi:size(Best_Route,2));
+[~,b1]=ismember(Best_Route,a1);
+b2=find(b1==0);
+a2=Best_Route(1,b1);
+Best_Route=[a1 a2];
+end
+else
+serial(1,1:size(seg_POI1,1))=linspace(1,size(seg_POI1,1),size(seg_POI1,1));
+Best_Route=flip(serial); 
+end
+Best_Route_new= Best_Route;
+end
+
+n1=size(Best_Route_new,2);
+n=0;
+judge_flag=zeros(size(seg_POI1,1)-1,1);
+while n<n1
+sweep_point=[];
+need_to_sweep1=[];
+need_to_sweepT=[];
+flag2=0;
+n=n+1;
+if n==n1
+sweep_point=[start1;final];
+else
+sweep_point=[seg_POI1(Best_Route_new(1,n),1:3);seg_POI1(Best_Route_new(1,n+1),1:3)];
+judge_flag(Best_Route_new(1,n+1),1)=1;
+end
+start1=sweep_point(2,:);
+P=sweep_point(1,1:2)-sweep_point(2,1:2);
+H_fly_actual=[ H_fly_actual;sweep_point(2,3)];
+u=abs(P(1,2))./abs(P(1,1));
+u1=(P(1,2))./(P(1,1));
+sita_sweep_point=(atan(u)/pi)*180;
+b=sweep_point(1,2)-sweep_point(1,1)*u1;
+v_y=1;
+line_final(1,1)=u1;
+line_final(2,1)=b;
+D_sweep_point=sqrt(sum((sweep_point(1,:)-sweep_point(2,:)).^2));
+R_UAV=sqrt(Re_UAV^2-(sweep_point(2,3))^2);
+if k<2
+if flag_miss==1
+V_s=Vxymax;
+else
+Ang=zeros(2,size(POI,1));
+for g=1:2
+for h=1:size(POI,1)
+P=sweep_point(g,:)-POI(h,:);
+u=abs(P(1,2))./abs(P(1,1));
+Ang(g,h)=(atan(u)/pi)*180;
+end
+end
+a=find(Ang<=60);
+b=round(size(a,1)/2);
+V_s=b*Vxymax/(size(POI,1));
+end
+else
+V_s=Vxymax;
+end
+V_final=[V_final;V_s];
+t_sxy=D_sweep_point/V_s;
+t_sz=abs((sweep_point(1,3)-sweep_point(2,3))/Vzmax); 
+t_s=t_sxy+t_sz;
+T_sxy=[T_sxy;t_sxy];
+T_sz=[T_sz;t_sz];
+if sweep_point(2,:)==start
+flag2=1;
+elseif flag_miss==1;
+batch_UAV_num=Bat1;
+else
+[~,d2]=ismember(seg_POI,sweep_point(2,:));
+s=find(d2(:,1)~=0&d2(:,2)~=0);
+Bat_index=judge(s,3);
+batch_UAV_num=Bat(Bat_index,1);
+end
+UAV_number=[UAV_number;batch_UAV_num];
+alpha=sita_sweep_point;
+beta=90-alpha;
+UAVs_position=zeros(batch_UAV_num,2);
+UAVs_position(1,:)=sweep_point(1,1:2);
+if (sita_UAV/2)>alpha
+if (sita_UAV/2)>beta
+x1=(cosd(sita_UAV/2-alpha)*2*R_UAV);
+y1=(sind(sita_UAV/2-alpha)*2*R_UAV);
+x2=(sind(sita_UAV/2-beta)*2*R_UAV);
+y2=(cosd(sita_UAV/2-beta)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;%
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else 
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i=1:((batch_UAV_num-1)/2)
+UAVs_position(i+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i*y1;
+end
+else
+for i=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i=1:((batch_UAV_num-1)/2)
+UAVs_position(i+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i*y1;
+end
+else
+for i=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i*x1;
+UAVs_position(i+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i*y1;
+end
+end 
+else 
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+else 
+x1=(cosd(sita_UAV/2-alpha)*2*R_UAV);
+y1=(sind(sita_UAV/2-alpha)*2*R_UAV);
+x2=(sind(beta-sita_UAV/2)*2*R_UAV);
+y2=(cosd(beta-sita_UAV/2)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y2;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+end
+else
+if (sita_UAV/2)>beta
+x1=(cosd(alpha-sita_UAV/2)*2*R_UAV);
+y1=(sind(alpha-sita_UAV/2)*2*R_UAV);
+x2=(sind(sita_UAV/2-beta)*2*R_UAV);
+y2=(cosd(sita_UAV/2-beta)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;%左
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y2;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+else
+x1=(cosd(alpha-sita_UAV/2)*2*R_UAV);
+y1=(sind(alpha-sita_UAV/2)*2*R_UAV);
+x2=(sind(beta-sita_UAV/2)*2*R_UAV);
+y2=(cosd(beta-sita_UAV/2)*2*R_UAV);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y2;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x2;%左侧
+UAVs_position(j1+1,2)=UAVs_position(1,2)-j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)-i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)-i1*y1;
+end
+end
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)-j1*x2;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y2;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y1;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)-i1*x1;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y1;
+end
+end
+else
+for j1=1:(batch_UAV_num/2)
+UAVs_position(j1+1,1)=UAVs_position(1,1)+j1*x1;
+UAVs_position(j1+1,2)=UAVs_position(1,2)+j1*y1;
+end
+if rem(batch_UAV_num,2)~=0
+for i1=1:((batch_UAV_num-1)/2)
+UAVs_position(i1+1+((batch_UAV_num-1)/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+((batch_UAV_num-1)/2),2)=UAVs_position(1,2)+i1*y2;
+end
+else
+for i1=1:floor((batch_UAV_num-1)/2)
+UAVs_position(i1+1+(batch_UAV_num/2),1)=UAVs_position(1,1)+i1*x2;
+UAVs_position(i1+1+(batch_UAV_num/2),2)=UAVs_position(1,2)+i1*y2;
+end
+end
+end
+end
+end
+end
+update_positions=zeros(batch_UAV_num,2);
+x0=(cosd(sita_sweep_point).*V_s);
+y0=(sind(sita_sweep_point).*V_s);
+if sweep_point(2,2)>sweep_point(1,2)
+if sweep_point(2,1)>sweep_point(1,1)
+x0=x0;
+y0=y0;
+else
+x0=-x0;
+y0=y0;
+end
+else
+if sweep_point(2,1)>sweep_point(1,1)
+x0=x0;
+y0=-y0;
+else
+x0=-x0;
+y0=-y0;
+end
+end
+for i2=0:t_s
+update_positions(:,1)=UAVs_position(:,1)+i2*x0;
+update_positions(:,2)=UAVs_position(:,2)+i2*y0;
+coverage_table=zeros(size(UAVs_position,1),size(POI,1));
+for j2=1:size(update_positions,1)
+for g=1:size(POI,1)
+d_uavp=sqrt(sum((update_positions(j2,:)-POI(g,1:2)).^2));
+if d_uavp<=R_UAV
+coverage_table(j2,g)=1;
+else
+coverage_table(j2,g)=0;
+end 
+end
+end
+sum_table=zeros(1,size(POI,1));
+for m=1:size(POI,1)
+sum_table(1,m)=sum(coverage_table(:,m));
+end
+T_sweep=[T_sweep;sum_table];
+end
+
+t_com=size(T_sweep,1)+2*t_up;
+T_com=[T_com;t_com];
+for i3=1:size(T_sweep,2)
+input=1;
+temp=T_sweep(:,i3)';
+t=temp==input;
+out=find(diff([t false])==-1)-find(diff([false t])==1)+1;
+if (length(out(out>=Tcon)))>=1
+sweep_success(i3,1)=1;
+end
+end 
+m1=0;
+if flag2==1
+n_start=size(T_sweep,1);
+Time_start=[ Time_start;n_start];
+change_batch=[change_batch;size(T_sxy,1)];
+success_point=find(sweep_success);
+[calculate,~]=ismember(success_point,AOI_point);
+index_c=find(calculate==0);
+success_point1=success_point(index_c,1);
+for i5=1:size(success_point1,1)
+AOI_point=[AOI_point;success_point1(i5,1)];
+a1=T_sweep(:,success_point1(i5,1));
+b=find(a1);
+res=[];
+table=[];
+n2=1;
+k1=1;
+while k1<size(b,1)
+j5 = k1+1 ;
+while j5 <= size(b,1) & b(j5)==b(j5-1)+1
+n2 = n2 + 1 ;
+j5 = j5 + 1 ;
+end
+if n2 >= Tcon
+res = [res ; b(k1),n2] ;
+table=[table;res];
+end
+n2 = 1 ;
+k1 = j5 ;
+end
+table=unique(table,'rows','stable');
+m1=m1+1;
+Time_diff=size(T_sweep,1)-table(size(table,1),1)+2*t_up;
+AOI=AOI+Time_diff;
+Table{m1,1}=table;
+end 
+if flag_miss==0
+ind1=find(sweep_success);
+if k<2
+for i4=1:size(cluster_member2) 
+if judge_flag(i4,1)==0
+member=cluster_member2{i4,:};
+[~,e6]=ismember(member,ind1);
+d6= all(e6(:));
+if d6==1
+judge_POI=seg_POI1(i4,:);
+[~,e5]=ismember(seg_POI1,judge_POI);
+d5=find(e5(:,1)~=0&e5(:,2)~=0&e5(:,3)~=0);
+if d5~=0
+judge_flag([d5],:)=1;
+[~,d55]=find( Best_Route_new==d5);
+Best_Route_new(:,[d55])=[];
+n1=n1-1;
+end
+end
+end
+end
+else
+for i4=1:size(sigle_member1)
+if judge_flag(i4,1)~=1
+member=sigle_member1(i4,:);
+[~,e6]=ismember(member,ind1);
+d6= all(e6(:)); 
+if d6==1
+judge_POI=seg_POI1(i4,:);
+[~,e5]=ismember(seg_POI1,judge_POI);
+d5=find(e5(:,1)~=0&e5(:,2)~=0&e5(:,3)~=0);
+if d5~=0
+judge_flag([d5],:)=1;
+[~,d55]=find( Best_Route_new==d5);
+Best_Route_new(:,[d55])=[];
+n1=n1-1;
+end
+end
+end
+end 
+end
+end 
+end
+end
+if k<2
+judge_cluster_sweep=find(sweep_success);
+[~,d2]=ismember(cluster_ME,judge_cluster_sweep);
+index=find(d2==0);
+if isempty(index)~=1
+need_to_sweep=POI(cluster_ME(index,:),:);
+need_to_sweep_T=T(cluster_ME(index,:),1);
+seg_POI1=need_to_sweep;
+seg_POI1(:,3)=H_fly;
+seg_T1=need_to_sweep_T;
+flag_miss=1;
+sweep_missed=[sweep_missed;size(V_final,1)];
+else
+flag_miss=0;
+end
+else
+judge_sigle_sweep=find(sweep_success);
+[~,d2]=ismember(sigle_member,judge_cluster_sweep);
+index=find(d2==0);
+if isempty(index)~=1
+need_to_sweep=POI(sigle_member(index,:),:);
+need_to_sweep_T=T(sigle_member(index,:),1);
+seg_POI1=need_to_sweep;
+seg_POI1(:,3)=H_fly;
+seg_T1=need_to_sweep_T;
+flag_miss=1;
+sweep_missed=[sweep_missed;size(V_final,1)];
+else
+flag_miss=0;
+end
+end
+end
+AOI_average=AOI/size(POI,1);
+gobal_perid=size(T_sweep,1);
+
+
+
+
+
+
+
+
+imbo_route
+
+function Best_Route =imbo_route(sink,batch_T,T_high1)
+n1 = size(sink,1);
+D1=zeros(n1,n1);
+for i = 1:n1
+for j = 1:n1 
+D1(i,j) = sqrt((x(i)-x(j))^2 + (y(i)-y(j))^2); 
+end 
+end
+OPTIONS.popsize =50; 
+OPTIONS.Maxgen =1000; 
+OPTIONS.numVar =n1; 
+OPTIONS.partition = 5/12; 
+maxStepSize = 1.0; 
+partition = OPTIONS.partition;
+numButterfly1 = ceil(partition*OPTIONS.popsize);  
+numButterfly2 = OPTIONS.popsize - numButterfly1; 
+period = 1.2;
+Land1 = zeros(numButterfly1, OPTIONS.numVar); 
+Land2 = zeros(numButterfly2, OPTIONS.numVar);
+BAR = partition; 
+Route_up=zeros(OPTIONS.Maxgen,n1+1);
+Best_value=zeros(OPTIONS.Maxgen,1);
+Fitness=zeros(OPTIONS.Maxgen,1);
+Length_ave=zeros(OPTIONS.Maxgen,1);
+Route_long = zeros(1,1);
+serial_T1=zeros(1,n1+1);
+serial_T=zeros(1,n1);
+serial_T(1,1:n1)=linspace(1,size(batch_T,1),size(batch_T,1));
+serial_T1(1,1:n1)=linspace(1,size(batch_T,1),size(batch_T,1));
+global Chrom
+Chrom=zeros(OPTIONS.popsize,n1);
+Ch_T=zeros(OPTIONS.popsize,n1);
+for i1=1:OPTIONS.popsize
+Chrom(i1,:)=randperm(n1);
+end
+for i1=1:OPTIONS.popsize
+S=Chrom(i1,:);
+for i2=1:size(S,2);
+Ch_T(i1,i2)=T_high1(S(1,i2));
+end
+end
+for i3=1:OPTIONS.Maxgen
+[Population1,Population2,Best_Route] = PopSort( serial_T,T_high1,D1,Chrom,numButterfly1,numButterfly2);
+Route_up(i3,1:n1)=Best_Route; 
+Route_up(i3,n1+1)=Best_Route(1);
+Best_value(i3) = T_R_diff( serial_T1,T_high1,D1,Route_up(i3,:));
+Fitness(i3)=-1/Best_value(i3);
+[Land1]=Migration(Population1,Population2,numButterfly1);
+for kk=1:numButterfly1 
+if T_R_diff( serial_T,T_high1,D1,Land1(kk,:))<T_R_diff( serial_T,T_high1,D1,Population1(kk,:))
+Land1(kk,:)=Population1(kk,:); 
+end
+end
+[Land2]=BAdjusting(Population2,numButterfly2,Best_Route);
+for kkk=1:numButterfly2 
+if T_R_diff( serial_T,T_high1,D1,Land2(kkk,:))<T_R_diff( serial_T,T_high1,D1,Population2(kkk,:))
+Land2(kkk,:)=Population2(kkk,:); 
+end
+end
+NewChrom=Land1;
+for i=1:numButterfly2
+NewChrom(i+numButterfly1,:)=Land2(i,:);
+end
+Chrom=NewChrom;
+end
+Time_Cost=etime(clock,t0)
+for i=1:OPTIONS.popsize
+T_Rlong = T_R_diff( serial_T,T_high1,D1,Chrom(i,:));
+end
+[a,b]=max(T_Rlong);
+Best_Route=Chrom(b,:);
+end
+
+
+function [Land1]=Migration(Population1,Population2,numButterfly1)
+period=1.2;
+partition=5/12;
+Land1=Population1;
+for i=1:numButterfly1
+r1=rand*period;
+if r1<=partition 
+N= length(Population1(1,:));
+a = unidrnd(N,1,2);  
+S_left = Population1(i,1:min(a)-1);
+S_mid = fliplr(Population1(i,min(a):max(a))); 
+S_right = Population1(i,max(a)+1:N);
+Land1(i,:) = [S_left,S_mid,S_right];
+else
+L=length(Population2(i,:)); 
+r=unidrnd(L,[1,2]);
+w1=Population2(i,r(1));
+Population2(i,r(1))=Population2(i,r(2));
+Population2(i,r(2))=w1;
+r=unidrnd(L,[1,2]);
+w1=Population2(i,r(1));
+Population2(i,r(1))=Population2(i,r(2));
+Population2(i,r(2))=w1;
+Land1(i,:)=Population2(i,:);
+end 
+End
+
+function [Land2]=BAdjusting(Population2,numButterfly2,Best_Route)
+Land2=Population2;
+L=length(Population2(1,:));
+partition=5/12;
+for i=1:numButterfly2
+if rand<=partition
+Land2(i,:)=Best_Route;
+r=unidrnd(L,[1,2]); 
+w1=Land2(i,r(1));
+Land2(i,r(1))=Land2(i,r(2));
+Land2(i,r(2))=w1;
+r=unidrnd(L,[1,2]);
+w1=Land2(i,r(1));
+Land2(i,r(1))=Land2(i,r(2));
+Land2(i,r(2))=w1;
+r=unidrnd(L,[1,2]);
+w1=Land2(i,r(1));
+Land2(i,r(1))=Land2(i,r(2));
+Land2(i,r(2))=w1;
+r=unidrnd(L,[1,2]);
+w1=Land2(i,r(1));
+Land2(i,r(1))=Land2(i,r(2));
+Land2(i,r(2))=w1;
+r=unidrnd(L,[1,2]);
+w1=Land2(i,r(1));
+Land2(i,r(1))=Land2(i,r(2));
+Land2(i,r(2))=w1;
+else
+N = length(Population2(1,:));
+a = unidrnd(N,1,2); 
+S_left = Population2(i,1:min(a)-1);
+S_mid = fliplr(Population2(i,min(a):max(a))); 
+S_right = Population2(i,max(a)+1:N);
+Land2(i,:) = [S_left,S_mid,S_right];
+End
+
+
+
+function [Population1,Population2,Best_Route] = PopSort( serial_T,seg_T1,D1,Chrom,numButterfly1,numButterfly2)
+n1=length(Chrom(1,:));
+n2=size(Chrom,1);
+T_Rlong=zeros(n2,1);
+for i1=1:n2
+T_Rlong(i1) = T_R_diff( serial_T,seg_T1,D1,Chrom(i1,:));
+end
+[a,b]=max(T_Rlong);
+Best_Route=Chrom(b,:); 
+for i2=1:n2
+[a,b]=max(T_Rlong);
+if i2<=numButterfly1
+Population1(i2,:)=Chrom(b,:); 
+T_Rlong(b)=T_Rlong(b)-10000;
+else
+Population2(i2-numButterfly1,:)=Chrom(b,:); T_Rlong(b)=T_Rlong(b)-10000;
+end
+end
+end
+
+
+function T_Rlong = T_R_diff( serial_T,seg_T1,D,S)
+t_value = Tlength(serial_T,seg_T1,S);
+distance = Routelength(D,S);
+T_Rlong =t_value-distance;
+End
+
+
+
+function t_value = Tlength(serial_T,seg_T1,S)
+n = length(S); 
+for j = 1:n
+ST_value(j)=seg_T1(S(1,j),1);
+end
+t_value=serial_T*(ST_value');
+end
+
+
+
+
+
+
 
